@@ -1,0 +1,11 @@
+build.properties
+build
+
+.buildpath
+.project
+.settings/
+/build.properties
+.idea
+
+*sublime-*
+jsolr.kdev4

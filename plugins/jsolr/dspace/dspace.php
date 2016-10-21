@@ -15,34 +15,16 @@ JLoader::registerNamespace('JSolr', JPATH_PLATFORM);
 
 class PlgJSolrDSpace extends \JSolr\Plugin
 {
-    protected $context = 'dspace';
-
-    protected $itemContext = 'archive.item';
-
-    protected $assetContext = 'archive.asset';
+    protected $context = 'archive.item';
 
     protected $collections = array();
-
-    private $connector = null;
-
-    public function __construct(&$subject, $config = array())
-    {
-        parent::__construct($subject, $config);
-
-        static::$chunk = 50;
-
-        // set some JSpace Crawler specific rules.
-        $this->set('bundleExclusions', explode(',', $this->get('params')->get('exclude_bundles_from_index', "")));
-
-        $this->set('contentExclusions', explode(',', $this->get('params')->get('exclude_bundle_content_from_index', "")));
-    }
 
     /**
      * Gets all DSpace items using the JSpace component and DSpace REST API.
      *
      * @return array A list of DSpace items.
      */
-    protected function getItems($start = 0, $limit = 20, $query = '*:*')
+    protected function getItems($start = 0, $limit = 10)
     {
         $items = array();
 
@@ -51,13 +33,13 @@ class PlgJSolrDSpace extends \JSolr\Plugin
 
             $vars = array();
 
-            $vars['q'] = $query;
+            $vars['q'] = "*:*";
 
             $vars['fl'] = 'search.resourceid,search.uniqueid,read';
 
             $vars['fq'] = 'search.resourcetype:2';
 
-            $vars['rows'] = '2147483647';
+            $vars['rows'] = $this->getTotal();
 
             if ($this->get('params')->get('private_access', "") == "") {
                 $vars['fq'] .= ' AND read:g0';
@@ -68,7 +50,9 @@ class PlgJSolrDSpace extends \JSolr\Plugin
 
             $vars['fq'] = urlencode($vars['fq']);
 
-            if ($lastModified = JArrayHelper::getValue($this->get('indexingParams'), 'lastModified', null, 'string')) {
+            $indexingParams = $this->get('indexingParams');
+
+            if ($lastModified = JArrayHelper::getValue($indexingParams, 'lastModified', null, 'string')) {
                 $lastModified = JFactory::getDate($lastModified)->format('Y-m-d\TH:i:s\Z', false);
 
                 $vars['q'] = urlencode("SolrIndexer.lastIndexed:[$lastModified TO NOW]");
@@ -99,400 +83,76 @@ class PlgJSolrDSpace extends \JSolr\Plugin
     }
 
     /**
-     * Prepares an article for indexing.
+     * Get the total number of DSpace items.
+     *
+     * @return  int  The total number of DSpace items.
      */
-    protected function getDocument(&$record)
+    protected function getTotal()
     {
-        $doc = new \JSolr\Apache\Solr\Document();
+        $total = 0;
 
-        $lang = $this->getLanguage($record, false);
+        try {
+            $vars = array();
 
-        $doc->addField('handle_s', $record->handle);
+            $vars['q'] = "*:*";
+            $vars['fq'] = 'search.resourcetype:2';
+            $vars['rows'] = '0';
 
-        if ($record->name) {
-            $doc->addField('title', $record->name);
-
-            $doc->addField("title_sort", $record->name); // for sorting by title
-        }
-
-        if ($record->access) {
-            $doc->addField('access', $record->access);
-        }
-
-        $collection = $this->getCollection($record->collection->id);
-
-        $doc->addField("parent_id", $collection->id);
-
-        $doc->addField("collection_s", $collection->name);
-
-        $doc->addField("collection_fc", $this->getFacet($collection->name));
-
-        $doc->addField("collection_sort", $collection->name);
-
-        $record = $this->getMultilingualDocument($record);
-
-        foreach ($record->metadata as $item) {
-            $field = $item->schema.'.'.$item->element;
-
-            if ($item->qualifier) {
-                $field .= '.'.$item->qualifier;
-            }
-
-            if (array_search($field, $this->get('params')->get('facets', array())) !== false) {
-                $doc->addField($field."_fc", $this->getFacet($item->value)); // for faceting
-            }
-
-            // Store title based on metadata field language.
-            if ($item->element == 'title') {
-                $titleLang = $lang;
-
-                if (isset($item->lang)) {
-                    $titleLang = $item->lang;
-                }
-
-                $doc->addField('title_'.$titleLang, $item->value);
-            }
-
-            if ($item->qualifier == 'author') {
-                $doc->addField('author', $item->value);
-            }
-
-            if ($item->element == 'description') {
-                $body = strip_tags($item->value);
-
-                if ($item->qualifier == 'abstract') {
-                    $doc->addField("body_$lang", $body);
-                } else if (!$item->qualifier && !$doc->getField('body')) {
-                    $doc->addField("body_$lang", $body);
-                }
-            }
-
-            // Any iso language not matching the default will be pushed to lang_alt.
-            if ($item->element == 'language' && $item->qualifier == 'iso') {
-                if ($item->value != $lang) {
-                    $doc->addField('lang_alt', str_replace('_', '-', $item->value));
-                }
-            }
-
-            // Handle dates carefully then just save out all other field
-            // values to generic multi-valued indexing fields.
-            if ($item->element == 'date') {
-                $doc->addField($field.'_txt', $item->value); // store raw value.
-
-                $value = $item->value;
-
-                // if only a year is given, add a month so it converts correctly.
-                if (preg_match("/^\d{4}$/", $item->value) > 0) {
-                    $value .= "-01";
-                }
-
-                $date = JFactory::getDate($value);
-
-                $value = $date->format('Y-m-d\TH:i:s\Z', false);
-
-                $year = $date->format('Y', false);
-
-                if (array_search($item->qualifier, array('created', 'modified'))) {
-                    $name = $item->qualifier;
-                } else {
-                    $name = $field.'_tdtm';
-                }
-
-                $doc->addField($name, $value); // store as an iso date.
-
-                $doc->addField($field.'_year_tim', $year); // store year only.
-
-                if (!$doc->getField($field.'_year_sort')) {
-                    $doc->addField($field.'_year_sort', $value); // for sorting
-                } else {
-                    JLog::add(
-                        JText::sprintf(
-                            "PLG_JSOLR_DSPACE_WARNING_MULTIDATE_SORT",
-                            $record->id,
-                            $field),
-                        JLog::WARNING,
-                        'jsolr');
-                }
-
-                if (!$doc->getField($field.'_sort')) {
-                    $doc->addField($field.'_sort', $value); // for sorting
-                } else {
-                    JLog::add(
-                        JText::sprintf(
-                            "PLG_JSOLR_DSPACE_WARNING_MULTIDATE_SORT",
-                            $record->id,
-                            $field),
-                        JLog::WARNING,
-                        'jsolr');
-                }
+            if ($this->get('params')->get('private_access', "") == "") {
+                $vars['fq'] .= ' AND read:g0';
             } else {
-                if (isset($item->lang)) {
-                    $doc->addField($field.'_'.$item->lang, $item->value); // language-specific indexing.
-                }
+                // only get items with read set.
+                $vars['fq'] .= ' AND read:[* TO *]';
             }
 
-            if (JString::strlen($item->value) < 32776) {
-                $doc->addField($field.'_sm', $item->value); // for (almost) exact matching.
+            $vars['fq'] = urlencode($vars['fq']);
+
+            $indexingParams = $this->get('indexingParams');
+
+            if ($lastModified = JArrayHelper::getValue($indexingParams, 'lastModified', null, 'string')) {
+                $lastModified = JFactory::getDate($lastModified)->format('Y-m-d\TH:i:s\Z', false);
+
+                $vars['q'] = urlencode("SolrIndexer.lastIndexed:[$lastModified TO NOW]");
             }
+
+            $url = new JUri($this->params->get('rest_url').'/discover.json');
+
+            $url->setQuery($vars);
+
+            $http = JHttpFactory::getHttp();
+
+            $response = $http->get((string)$url);
+
+            if ((int)$response->code !== 200) {
+                throw new Exception($response->body, $response->code);
+            }
+
+            $response = json_decode($response->body);
+
+            return (int)$response->response->numFound;
+        } catch (Exception $e) {
+            JLog::add($e->getMessage(), JLog::ERROR, 'jsolr');
         }
-
-        return $doc;
     }
 
     /**
-     * @todo A bruteforce/messy way to get multilingual information out of DSpace
-     * and into JSolr.
+     * Gets a DSpace item by id.
+     *
+     * @param   int       $id  The DSpace item id.
+     *
+     * @return  stdClass  An instance of the DSpace item.
      */
-    private function getMultilingualDocument($record)
+    protected function getItem($id)
     {
-        $languages = array();
+        $url = $this->params->get('rest_url').'/items/'.$id.'.json';
 
-        // DSpace handles languages and translations horribly.
-        foreach (JLanguageHelper::getLanguages() as $language) {
-            $code = $language->lang_code;
-
-            // we need to handle en_US differently in DSpace.
-            if (JString::strtolower($code) == 'en-us') {
-                $code = 'en_US';
-            }
-
-            $languages[] = JString::strtolower(JArrayHelper::getValue(explode("-", $code), 0));
-        }
-
-        $fields = array();
-
-        foreach ($languages as $language) {
-            foreach ($record->metadata as $item) {
-                $field = $item->schema.'.'.$item->element;
-
-                if ($item->qualifier) {
-                    $field .= '.'.$item->qualifier;
-                }
-
-                $field .= '.'.$language;
-
-                $fields[] = $field;
-            }
-        }
-
-        $vars = array();
-
-        $vars['q'] = '*:*';
-
-        $vars['fq'] = "(search.resourceid:".$record->id."%20AND%20search.resourcetype:2)";
-
-        $vars['fl'] = implode(',', $fields);
-
-        $url = new JUri($this->params->get('rest_url').'/discover.json');
-
-        $url->setQuery($vars);
-
-        $http = JHttpFactory::getHttp();
-
-        $response = $http->get((string)$url);
+        $response = JHttpFactory::getHttp()->get((string)$url);
 
         if ((int)$response->code !== 200) {
             throw new Exception($response->body, $response->code);
         }
 
-        $response = json_decode($response->body);
-
-        if (isset($response->response->docs)) {
-            $document = JArrayHelper::getValue($response->response->docs, 0);
-
-            $document = JArrayHelper::fromObject($document);
-
-            foreach ($fields as $field) {
-                if (array_key_exists($field, $document)) {
-                    $parts = explode(".", $field);
-
-                    $popped = $parts;
-
-                    array_pop($popped);
-
-                    $popped = implode(".", $popped);
-
-                    foreach (JArrayHelper::getValue($document, $field) as $value) {
-                        $found = false;
-
-                        while (($item = current($record->metadata)) && !$found) {
-                            $raw = $item->schema.'.'.$item->element;
-
-                            if ($item->qualifier) {
-                                $raw .= '.'.$item->qualifier;
-                            }
-
-                            if ($popped == $raw) {
-                                if ($item->value == $value) {
-                                    $key = key($record->metadata);
-
-                                    $record->metadata[$key]->lang = JArrayHelper::getValue($parts, count($parts)-1);
-
-                                    $found = true;
-                                }
-                            }
-
-                            next($record->metadata);
-                        }
-
-                        reset($record->metadata);
-                    }
-                }
-            }
-        }
-
-        return $record;
-    }
-
-    /**
-     * Gets a list of bitstreams for the parent item.
-     *
-     * @param stdClass $parent The parent Solr item.
-     * @return array An array of bitstream objects.
-     */
-    private function getBitstreams($parent)
-    {
-        $bundles = array();
-
-        $bitstreams = array();
-
-        $url = new JUri($this->params->get('rest_url').'/items/'.$parent->id.'/bundles.json');
-
-        $http = JHttpFactory::getHttp();
-
-        $response = $http->get((string)$url);
-
-        if ((int)$response->code !== 200) {
-            throw new Exception($response->body, $response->code);
-        }
-
-        $bundles = json_decode($response->body);
-
-        $i = 0;
-
-        foreach ($bundles as $bundle) {
-            if (in_array($bundle->name, $this->get('bundleExclusions')) === false) {
-                foreach ($bundle->bitstreams as $bitstream) {
-                    $path = $this->params->get('rest_url').'/bitstreams/'.$bitstream->id.'/download';
-
-                    try {
-                        $extractor = \JSolr\Index\Factory::getExtractor($path);
-
-                        if ($extractor->isAllowedContentType()) {
-                            $this->out(array($path, "[extracting]"));
-
-                            $indexContent = (
-                                    (in_array($bundle->name, $this->get('contentExclusions')) === false) &&
-                                    $extractor->isContentIndexable());
-
-                            $bitstreams[$i] = $bitstream;
-
-                            if ($indexContent) {
-                                $bitstreams[$i]->body = $extractor->getContent();
-                            }
-
-                            $bitstreams[$i]->metadata = $extractor->getMetadata();
-
-                            $bitstreams[$i]->lang = $extractor->getLanguage();
-
-                            $bitstreams[$i]->type = $bundle->name;
-
-                            $this->out(array($path, "[extracted]"));
-
-                            $i++;
-                        }
-                    } catch (Exception $e) {
-                        if ($e->getMessage()) {
-                            $this->out($e->getMessage());
-                        } else {
-                            $code = $e->getCode();
-                            $this->out(JText::_("PLG_JSOLR_DSPACE_ERROR_".$code));
-                            $this->out(
-                                array(
-                                    $path,
-                                    '[status:'.$code.']'));
-                        }
-                    }
-                }
-            }
-        }
-
-        return $bitstreams;
-    }
-
-    /**
-     * Gets a populated instance of the \JSolr\Apache\Solr\Document class containing
-     * indexable information about a single bitstream.
-     *
-     * @param stdClass $record The bitstream information.
-     *
-     * @return \JSolr\Apache\Solr\Document A populated instance of the
-     * \JSolr\Apache\Solr\Document class containing indexable information about
-     * the single bitstream.
-     */
-    private function getBitstreamDocument($record)
-    {
-        $doc = new \JSolr\Apache\Solr\Document();
-
-        // Make the first language available the bitstream's language.
-        $lang = explode('-', JArrayHelper::getValue($record->lang, 0));
-
-        $lang = JArrayHelper::getvalue($lang, 0);
-
-        $doc->addField('id', $record->id);
-
-        $doc->addField('context', $this->get('assetContext'));
-
-        for ($i = 0; $i < count($record->lang); $i++) {
-            if ($i == 0) {
-                if ($this->get('params')->get('ignore_language', 1)) {
-                    $doc->addField('lang', '*');
-                } else {
-                    $doc->addField('lang', JArrayHelper::getValue($record->lang, $i));
-                }
-            } else {
-                $doc->addField('lang_alt', JArrayHelper::getValue($record->lang, $i));
-            }
-        }
-
-        $doc->addField('key', $this->get('assetContext').'.'.$record->id);
-
-        if (isset($record->author)) {
-            $doc->addField('author', $record->author);
-
-            $doc->addField('author_'.$lang, $record->author);
-        }
-
-        $doc->addField('title', $record->name);
-
-        $doc->addField('title_'.$lang, $record->name);
-
-        $doc->addField('type_s', $record->type);
-
-        if (isset($record->body)) {
-            if (strip_tags($record->body)) {
-                $doc->addField("body_$lang", strip_tags($record->body));
-            }
-        }
-
-        foreach ($record->metadata->toArray() as $key=>$value) {
-            $metakey = $this->cleanBitstreamMetadataKey($key);
-
-            if (is_float($value)) {
-                $doc->addField($metakey.'_tfm', $value);
-            } elseif (is_int($value)) {
-                // handle solr int/long differentiation.
-                if ((int)$value > 2147483647 || (int)$value < -2147483648) {
-                    $doc->addField($metakey.'_tlm', $value);
-                } else {
-                    $doc->addField($metakey.'_tim', $value);
-                }
-            } else {
-                $doc->addField($metakey.'_sm', $value);
-            }
-        }
-
-        return $doc;
+        return json_decode($response->body);
     }
 
     /**
@@ -570,83 +230,6 @@ class PlgJSolrDSpace extends \JSolr\Plugin
     }
 
     /**
-     * (non-PHPdoc)
-     * @see \JSolr\Plugin::index()
-     */
-    protected function index()
-    {
-        $commitWithin = $this->params->get(
-                            'component.commitsWithin',
-                            '10000');
-
-        $endpoint = $this->params->get('rest_url').'/items/%s.json';
-
-        $total = 0;
-
-        $totalBitstreams = 0;
-
-        $items = $this->getItems();
-
-        $solr = \JSolr\Index\Factory::getService();
-
-        $documents = array();
-
-        foreach ($items as $temp) {
-            $total++;
-
-            try {
-                $id = $temp->{'search.resourceid'};
-
-                $url = new JUri(JText::sprintf($endpoint, $id));
-
-                $http = JHttpFactory::getHttp();
-
-                $response = $http->get((string)$url);
-
-                if ((int)$response->code !== 200) {
-                    throw new Exception($response->body, $response->code);
-                }
-
-                $item = json_decode($response->body);
-
-                $item->access = $this->getAccess($temp);
-
-                $document = $this->prepare($item);
-
-                // assuming that when we get a document, it will be the document + n bitstreams.
-                // Not a smart calculation, needs to be reworked.
-                $totalBitstreams += count($document) - 1;
-
-                $documents = array_merge($documents, $document);
-            } catch (Exception $e) {
-                if ($e->getCode() == 403) {
-                    $this
-                        ->out(array('Could not index item '.$id, '[skipping]'))
-                        ->out("\tReason:".$e->getMessage());
-                    // continue from this kind of error.
-                }
-            }
-
-            // index when either the number of items retrieved matches
-            // the total number of items being indexed or when the
-            // index chunk size has been reached.
-            if ($total == count($items) || count($documents) >= static::$chunk) {
-                $response = $solr->addDocuments($documents, true, $commitWithin);
-
-                $this->out(
-                    array(
-                        count($documents).' documents successfully indexed',
-                        '[status:'.$response->getHttpStatus().']'));
-
-                $documents = array();
-            }
-        }
-
-        $this->out("items indexed: $total")
-             ->out("bitsteams indexed: $totalBitstreams");
-    }
-
-    /**
      * A convenience event for adding a record to the index.
      *
      * Use this event when the plugin is known but the context is not.
@@ -719,15 +302,17 @@ class PlgJSolrDSpace extends \JSolr\Plugin
         }
     }
 
-    protected function buildQuery()
-    {
-        return "";
-    }
-
-    private function getAccess($item)
+    /**
+     * Maps the DSpace access value to a corresponding Joomla! access level.
+     *
+     * @param   string  $access  The DSpace access level.
+     *
+     * @return  string  The Joomla! access level.
+     */
+    private function mapDSpaceAccessToJoomla($access)
     {
         // g0 = public
-        if (array_search('g0', $item->read) !== false) {
+        if ($access == 'g0') {
             return $this->get('params')->get('anonymous_access', null);
         } else {
             return $this->get('params')->get('private_access', null);
@@ -737,121 +322,126 @@ class PlgJSolrDSpace extends \JSolr\Plugin
     /**
      * Prepare the item for indexing.
      *
-     * @param stdClass $item
-     * @return array An array of \JSolr\Apache\Solr\Document objects to be indexed.
-     *
-     * @todo Need to merge this and the index logic as it is being replicated.
+     * @param   StdClass  $source
+     * @return  array
      */
-    protected function prepare($item)
+    protected function prepare($source)
     {
-        $documents = array();
+        $access = $this->mapDSpaceAccessToJoomla(array_pop($source->read));
 
-        $i = 0;
+        $source = $this->getItem($source->{"search.resourceid"});
 
-        $documents[$i] = $this->getDocument($item);
+        $metadata = array();
 
-        $documents[$i]->addField('id', $this->context.":".$item->id);
+        foreach ($source->metadata as $field) {
+            $name = $field->schema.'.'.$field->element;
 
-        $documents[$i]->addField('context', $this->get('itemContext'));
+            if (isset($field->qualifier)) {
+                $name .= '.'.$field->qualifier;
+            }
 
-        if ($this->get('params')->get('ignore_language', 1)) {
-            $documents[$i]->addField('lang', '*');
-        } else {
-            $documents[$i]->addField('lang', $this->getLanguage($item));
-        }
-
-        $key = $this->buildKey($documents[$i]);
-
-        $documents[$i]->addField('key', $key);
-
-        $this->out(array('item '.$key, '[queued]'));
-
-        if ($this->get('params')->get('component.index', false)) {
-            $bitstreams = $this->getBitstreams($item);
-
-            $j=$i;
-
-            $j++;
-
-            foreach ($bitstreams as $bitstream) {
-                $type = strtolower($bitstream->type);
-
-                $documents[$i]->addField($type.'_bitstream_id_tim', $bitstream->id);
-
-                $documents[$i]->addField($type.'_bitstream_title_'.$this->getLanguage($item, false), $bitstream->name);
-
-                if (isset($bitstream->body)) {
-                    $documents[$i]->addField($type.'_bitstream_body_'.$this->getLanguage($item, false), strip_tags($bitstream->body));
+            if (array_key_exists($name, $metadata)) {
+                if (!is_array($metadata[$name])) {
+                    $temp = $metadata[$name];
+                    $metadata[$name] = array();
+                    $metadata[$name][] = $temp;
                 }
 
-                foreach ($bitstream->metadata->toArray() as $key=>$value) {
-                    $metakey = $this->cleanBitstreamMetadataKey($key);
-
-                    if (is_float($value)) {
-                        $documents[$i]->addField($type.'_bitstream_'.$metakey.'_tfm', $value);
-                    } elseif (is_int($value)) {
-                        // handle solr int/long differentiation.
-                        if ((int)$value > 2147483647 || (int)$value < -2147483648) {
-                            $documents[$i]->addField($type.'_bitstream_'.$metakey.'_tlm', $value);
-                        } else {
-                            $documents[$i]->addField($type.'_bitstream_'.$metakey.'_tim', $value);
-                        }
-                    } else {
-                        $documents[$i]->addField($type.'_bitstream_'.$metakey.'_sm', $value);
-                    }
-                }
-
-                $documents[$j] = $this->getBitstreamDocument($bitstream);
-
-                if ($documents[$i]->getField('created')) {
-                    $documents[$j]->addField("created", JArrayHelper::getValue(JArrayHelper::getValue($documents[$i]->getField('created'), 'value'), 0));
-                }
-
-                if ($documents[$i]->getField('modified')) {
-                    $documents[$j]->addField("modified", JArrayHelper::getValue(JArrayHelper::getValue($documents[$i]->getField('modified'), 'value'), 0));
-                }
-
-                $documents[$j]->addField("parent_id", $item->id);
-
-                $key =
-                JArrayHelper::getValue(
-                        JArrayHelper::getValue(
-                                $documents[$j]->getField('key'),
-                                'value'),
-                        0);
-
-                $this->out(array('bitstream '.$key, '[queued]'));
-
-                $j++;
+                $metadata[$name][] = $field->value;
+            } else {
+                $metadata[$name] = $field->value;
             }
         }
 
-        return $documents;
-    }
+        $locale = JArrayHelper::getValue($metadata, 'dc.language.iso');
 
-    /**
-     * Clean metadata key so that it is index friendly.
-     *
-     * @param string $key The key to clean.
-     * @return string The cleaned metadata key.
-     */
-    private function cleanBitstreamMetadataKey($key)
-    {
-        $metakey = strtolower($key);
+        if (is_array($locale)) {
+            $locale = array_pop($lang);
+        }
 
-        $metakey = preg_replace("/[^a-z0-9\s\-]/i", "", $metakey);
+        $lang = $this->getLanguage($locale, false);
 
-        $metakey = preg_replace("/[\s\-]/", "_", $metakey);
+        $category = $this->getCollection($source->collection->id);
 
-        return $metakey;
+        $array = array();
+
+        $array['id'] = $this->buildId($source->id);
+        $array['id_i'] = $source->id;
+        $array['name'] = $source->name;
+
+        $array["author"] = array();
+        $array["author_ss"] = array();
+
+        $authors = JArrayHelper::getValue($metadata, 'dc.contributor.author', array());
+
+        if (!is_array($authors)) {
+            $authors = array($authors);
+        }
+
+        foreach ($authors as $author) {
+            $array["author"][] = $author;
+            $array["author_ss"][] = $this->getFacet($author);
+        }
+
+        $array["title_txt_$lang"] = $array['name'];
+        $array['context_s'] = $this->get('context');
+        $array['lang_s'] = $this->getLanguage($locale);
+
+        $array['access_i'] = $access;
+        $array["category_txt_$lang"] = $category->name;
+        $array["category_s"] = $this->getFacet($category->name); // for faceting
+        $array["category_i"] = $category->id;
+
+        $array['handle_s'] = $source->handle;
+
+        $accessioned = JArrayHelper::getValue($metadata, 'dc.date.accessioned');
+
+        if (is_array($accessioned)) {
+            $accessioned = array_pop($accessioned);
+        }
+
+        $created = JFactory::getDate($accessioned);
+        $modified = JFactory::getDate(date("c", $source->lastModified/1000));
+
+        if ($created > $modified) {
+            $modified = $created;
+        }
+
+        $array['created_tdt'] = $created->format('Y-m-d\TH:i:s\Z', false);
+        $array['modified_tdt'] = $modified->format('Y-m-d\TH:i:s\Z', false);
+        $array["parent_id_i"] = $category->id;
+
+        $descriptions = array();
+        $descriptions[] = JArrayHelper::getValue($metadata, 'dc.description');
+        $descriptions[] = JArrayHelper::getValue($metadata, 'dc.description.abstract');
+
+        $content = null;
+
+        foreach ($descriptions as $description) {
+            // flatten description.
+            if (is_array($description)) {
+                $description = implode("\n", $description);
+            }
+
+            if (!empty($description)) {
+                $content .= $description;
+            }
+        }
+
+        if (!is_null($content)) {
+            $array["content_txt_$lang"] = $content;
+        }
+
+        return $array;
     }
 
     private function getCollection($id)
     {
+        $collections = $this->get('collections');
         $collection = null;
 
-        if (array_key_exists($id, $this->get('collections'))) {
-            $collection = JArrayHelper::getValue($this->get('collections'), $id);
+        if (array_key_exists($id, $collections)) {
+            $collection = JArrayHelper::getValue($collections, $id);
         } else {
             try {
                 $url = new JUri($this->params->get('rest_url').'/collections/'.$id.'.json');
@@ -895,51 +485,17 @@ class PlgJSolrDSpace extends \JSolr\Plugin
         return $metadata;
     }
 
-    public function getLanguage($item, $includeRegion = true)
+    public function getLanguage($language, $includeRegion = true)
     {
-        // Grab the first iso code. This will be the record's default
-        // language.
-        $found = false;
-
-        $lang = parent::getLanguage($item, $includeRegion);
-
-        $metadata = $item->metadata;
-
-        $languages = JLanguageHelper::getLanguages();
-
-        while (($field = current($metadata)) && !$found) {
-            $metafield = $field->schema.'.'.$field->element;
-
-            if (isset($field->qualifier)) {
-                $metafield .= '.'.$field->qualifier;
-            }
-
-            if ($metafield == 'dc.language.iso') {
-                while (($language = current($languages)) && !$found) {
-                    $code = $language->lang_code;
-
-                    // we need to handle en_US differently in DSpace.
-                    if (JString::strtolower($code) == 'en-us') {
-                        $code = 'en_US';
-                    }
-
-                    if ($code == str_replace('_', '-', $field->value)) {
-                        $lang = $code;
-                        $found = true;
-                    }
-
-                    next($languages);
-                }
-
-                reset($languages);
-            }
-
-            next($metadata);
+        // iso language/region codes are poorly implemented in DSpace.
+        // Default en to en_GB since there is an en_US.
+        if ($language == 'en') {
+            $language = 'en_GB';
         }
 
-        reset($metadata);
+        $language = str_replace('_', '-', $language);
 
-        return $lang;
+        return parent::getLanguage($language, $includeRegion);
     }
 
     public function onJSolrSearchPrepareData($document)
