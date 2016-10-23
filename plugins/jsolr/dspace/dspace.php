@@ -13,7 +13,7 @@ JLoader::import('joomla.log.log');
 
 JLoader::registerNamespace('JSolr', JPATH_PLATFORM);
 
-class PlgJSolrDSpace extends \JSolr\Plugin
+class PlgJSolrDSpace extends \JSolr\Plugin\Update
 {
     protected $context = 'archive.item';
 
@@ -48,15 +48,11 @@ class PlgJSolrDSpace extends \JSolr\Plugin
                 $vars['fq'] .= ' AND read:[* TO *]';
             }
 
-            $vars['fq'] = urlencode($vars['fq']);
-
-            $indexingParams = $this->get('indexingParams');
-
-            if ($lastModified = JArrayHelper::getValue($indexingParams, 'lastModified', null, 'string')) {
-                $lastModified = JFactory::getDate($lastModified)->format('Y-m-d\TH:i:s\Z', false);
-
-                $vars['q'] = urlencode("SolrIndexer.lastIndexed:[$lastModified TO NOW]");
+            if ($indexed = $this->indexed) {
+                $vars['fq'] .= " AND SolrIndexer.lastIndexed:[$indexed TO $this->now]";
             }
+
+            $vars['fq'] = urlencode($vars['fq']);
 
             $url = new JUri($this->params->get('rest_url').'/discover.json');
 
@@ -105,15 +101,11 @@ class PlgJSolrDSpace extends \JSolr\Plugin
                 $vars['fq'] .= ' AND read:[* TO *]';
             }
 
-            $vars['fq'] = urlencode($vars['fq']);
-
-            $indexingParams = $this->get('indexingParams');
-
-            if ($lastModified = JArrayHelper::getValue($indexingParams, 'lastModified', null, 'string')) {
-                $lastModified = JFactory::getDate($lastModified)->format('Y-m-d\TH:i:s\Z', false);
-
-                $vars['q'] = urlencode("SolrIndexer.lastIndexed:[$lastModified TO NOW]");
+            if ($indexed = $this->indexed) {
+                $vars['fq'] .= " AND SolrIndexer.lastIndexed:[$indexed TO $this->now]";
             }
+
+            $vars['fq'] = urlencode($vars['fq']);
 
             $url = new JUri($this->params->get('rest_url').'/discover.json');
 
