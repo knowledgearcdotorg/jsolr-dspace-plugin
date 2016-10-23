@@ -62,22 +62,6 @@
                      />
 
                 <field
-                    name="exclude_bundles_from_index"
-                    type="text"
-                    label="PLG_JSOLR_DSPACE_FIELD_EXCLUDE_BUNDLES_FROM_INDEX_LABEL"
-                    description="PLG_JSOLR_DSPACE_FIELD_EXCLUDE_BUNDLES_FROM_INDEX_DESC"
-                    size="40"
-                    class="inputbox"/>
-
-                <field
-                    name="exclude_bundle_content_from_index"
-                    type="text"
-                    label="PLG_JSOLR_DSPACE_FIELD_EXCLUDE_BUNDLE_CONTENT_FROM_INDEX_LABEL"
-                    description="PLG_JSOLR_DSPACE_FIELD_EXCLUDE_BUNDLE_CONTENT_FROM_INDEX_DESC"
-                    size="40"
-                    class="inputbox"/>
-
-                <field
                     name="indexed"
                     type="calendar"
                     label="PLG_JSOLR_DSPACE_FIELD_INDEXED_LABEL"
