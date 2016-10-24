@@ -13,6 +13,8 @@ JLoader::import('joomla.log.log');
 
 JLoader::registerNamespace('JSolr', JPATH_PLATFORM);
 
+use \Joomla\Utilities\ArrayHelper;
+
 class PlgJSolrDSpace extends \JSolr\Plugin\Update
 {
     protected $context = 'archive.item';
@@ -198,7 +200,7 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
             }
         }
 
-        $locale = JArrayHelper::getValue($metadata, 'dc.language.iso');
+        $locale = ArrayHelper::getValue($metadata, 'dc.language.iso');
 
         if (is_array($locale)) {
             $locale = array_pop($lang);
@@ -217,7 +219,7 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
         $array["author"] = array();
         $array["author_ss"] = array();
 
-        $authors = JArrayHelper::getValue($metadata, 'dc.contributor.author', array());
+        $authors = ArrayHelper::getValue($metadata, 'dc.contributor.author', array());
 
         if (!is_array($authors)) {
             $authors = array($authors);
@@ -239,7 +241,7 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
 
         $array['handle_s'] = $source->handle;
 
-        $accessioned = JArrayHelper::getValue($metadata, 'dc.date.accessioned');
+        $accessioned = ArrayHelper::getValue($metadata, 'dc.date.accessioned');
 
         if (is_array($accessioned)) {
             $accessioned = array_pop($accessioned);
@@ -257,8 +259,8 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
         $array["parent_id_i"] = $category->id;
 
         $descriptions = array();
-        $descriptions[] = JArrayHelper::getValue($metadata, 'dc.description');
-        $descriptions[] = JArrayHelper::getValue($metadata, 'dc.description.abstract');
+        $descriptions[] = ArrayHelper::getValue($metadata, 'dc.description');
+        $descriptions[] = ArrayHelper::getValue($metadata, 'dc.description.abstract');
 
         $content = null;
 
@@ -277,6 +279,21 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
             $array["content_txt_$lang"] = $content;
         }
 
+        foreach ($metadata as $key=>$value) {
+            // store format, subject and contributor.
+            // don't store contributor.author; we store this in author/author_ss.
+            if (strpos($key, 'dc.format') === 0 ||
+                strpos($key, 'dc.subject') === 0 ||
+                (strpos($key, 'dc.contributor') === 0 && $key != "dc.contributor.author")) {
+                if (!is_array($value)) {
+                    $value = array($value);
+                }
+
+                $key = str_replace(".", "_", strtolower($key))."_ss";
+                $array[$key] = $value;
+            }
+        }
+
         return $array;
     }
 
@@ -286,7 +303,7 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
         $collection = null;
 
         if (array_key_exists($id, $collections)) {
-            $collection = JArrayHelper::getValue($collections, $id);
+            $collection = ArrayHelper::getValue($collections, $id);
         } else {
             try {
                 $url = new JUri($this->params->get('rest_url').'/collections/'.$id.'.json');
