@@ -87,6 +87,6 @@
     </config>
 
     <updateservers>
-        <server type="extension" priority="1"><![CDATA[http://knowledgearc.org/index.php?option=com_ars&view=update&task=stream&format=xml&id=7&dummy=extension.xml]]></server>
+        <server type="extension" priority="1"><![CDATA[https://raw.githubusercontent.com/knowledgearcdotorg/jsolr-dspace-plugin/master/manifest.xml]]></server>
     </updateservers>
 </extension>
