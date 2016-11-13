@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <extension version="3.4" type="plugin" group="jsolr" method="upgrade">
     <name>plg_jsolr_dspace</name>
-    <creationDate>2016-04-21</creationDate>
+    <creationDate>2016-11-14</creationDate>
     <author>KnowledgeArc Ltd</author>
     <authorEmail>development@knowledgearc.com</authorEmail>
     <authorUrl>http://www.knowledgearc.org</authorUrl>
