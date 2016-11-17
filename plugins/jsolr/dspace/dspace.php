@@ -39,7 +39,8 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
 
             $vars['fq'] = 'search.resourcetype:2';
 
-            $vars['rows'] = $this->getTotal();
+            $vars['start'] = $start;
+            $vars['rows'] = $limit;
 
             if ($this->get('params')->get('private_access', "") == "") {
                 $vars['fq'] .= ' AND read:g0';
@@ -174,7 +175,11 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
     {
         $access = $this->mapDSpaceAccessToJoomla(array_pop($source->read));
 
-        $source = $this->getItem($source->{"search.resourceid"});
+        try {
+            $source = $this->getItem($source->{"search.resourceid"});
+        } catch (Exception $e) {
+            return array();
+        }
 
         $metadata = array();
 
