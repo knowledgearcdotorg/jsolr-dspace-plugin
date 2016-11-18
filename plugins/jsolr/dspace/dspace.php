@@ -376,11 +376,11 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
 
     public function onJSolrSearchPrepareData($document)
     {
-        if ($this->itemContext == $document->context_s) {
+        if ($this->context == $document->context_s) {
             require_once(JPATH_ROOT."/components/com_jcar/helpers/route.php");
 
             if (class_exists("JCarHelperRoute")) {
-                $document->link = JCarHelperRoute::getItemRoute($document->id);
+                $document->link = JCarHelperRoute::getItemRoute("dspace:".$document->id_i);
             }
         }
     }
