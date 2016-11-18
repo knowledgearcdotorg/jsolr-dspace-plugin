@@ -277,6 +277,56 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
 
         $array["content_txt_$lang"] = implode(" ", $content);
 
+        // index additional fields for faceting.
+        $types = array(
+            "_ss"=>array("dc.subject", "dc.type", "dc.relation"),
+            "_tdt"=>array("dc.date"));
+
+        foreach ($metadata as $key=>$value) {
+            foreach ($types as $ktype=>$vtype) {
+                foreach ($vtype as $needle) {
+                    if (strpos($key, $needle) === 0) {
+                        $parts = explode(".", $key);
+
+                        $field = (array_pop($parts));
+
+                        if (!isset($array[$field.$ktype])) {
+                            $array[$field.$ktype] = array();
+                        }
+
+                        if (!is_array($value)) {
+                            $value = array($value);
+                        }
+
+                        if (!empty($value)) {
+                            if ($needle == "dc.date") {
+                                // DSpace has poor date handling. Sometimes only the year is available.
+                                foreach ($value as $k=>$v) {
+                                    // convert year-only dates to correctly formatted date.
+                                    if (!DateTime::createFromFormat('Y-m-d\TH:i:s\Z', $v)) {
+                                        if ((int)$v == $v) {
+                                            $value[$k] = "$v-01-01T00:00:00Z";
+                                        }
+                                    }
+                                }
+                            }
+
+                            $array[$field.$ktype] = array_merge($array[$field.$ktype] , $value);
+
+                            // only index dc.subject as a tag.
+                            if ($needle == 'dc.subject') {
+                                if (!isset($array['tag_ss'])) {
+                                    $array['tag_ss'] = array();
+                                }
+
+                                $array['tag_ss'] = array_merge($array['tag_ss'] , $value);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         return $array;
     }
 
