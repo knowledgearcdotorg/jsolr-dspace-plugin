@@ -261,26 +261,21 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
         $array['modified_tdt'] = $modified->format('Y-m-d\TH:i:s\Z', false);
         $array["parent_id_i"] = $category->id;
 
-        $descriptions = array();
-        $descriptions[] = JArrayHelper::getValue($metadata, 'dc.description');
-        $descriptions[] = JArrayHelper::getValue($metadata, 'dc.description.abstract');
+        $description = JArrayHelper::getValue(
+                        $metadata,
+                        'dc.description',
+                        array(),
+                        'array');
 
-        $content = null;
+        $array["description_txt_$lang"] = implode(" ", $description);
 
-        foreach ($descriptions as $description) {
-            // flatten description.
-            if (is_array($description)) {
-                $description = implode("\n", $description);
-            }
+        $content = JArrayHelper::getValue(
+                        $metadata,
+                        'dc.description.abstract',
+                        array(),
+                        'array');
 
-            if (!empty($description)) {
-                $content .= $description;
-            }
-        }
-
-        if (!is_null($content)) {
-            $array["content_txt_$lang"] = $content;
-        }
+        $array["content_txt_$lang"] = implode(" ", $content);
 
         return $array;
     }
