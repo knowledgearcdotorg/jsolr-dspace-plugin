@@ -24,7 +24,7 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
      *
      * @return array A list of DSpace items.
      */
-    protected function getItems($start = 0, $limit = 10)
+    protected function getItems($start = 0, $limit = 500)
     {
         $items = array();
 
