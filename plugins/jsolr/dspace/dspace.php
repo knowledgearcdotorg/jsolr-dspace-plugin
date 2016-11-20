@@ -280,7 +280,7 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
         // index additional fields for faceting.
         $types = array(
             "_ss"=>array("dc.subject", "dc.type", "dc.relation"),
-            "_tdt"=>array("dc.date"));
+            "_dts"=>array("dc.date"));
 
         foreach ($metadata as $key=>$value) {
             foreach ($types as $ktype=>$vtype) {
