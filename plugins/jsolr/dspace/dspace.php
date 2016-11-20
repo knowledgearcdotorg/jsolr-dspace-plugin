@@ -302,11 +302,16 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
                             if ($needle == "dc.date") {
                                 // DSpace has poor date handling. Sometimes only the year is available.
                                 foreach ($value as $k=>$v) {
-                                    // convert year-only dates to correctly formatted date.
-                                    if (!DateTime::createFromFormat('Y-m-d\TH:i:s\Z', $v)) {
-                                        if ((int)$v == $v) {
-                                            $value[$k] = "$v-01-01T00:00:00Z";
-                                        }
+                                    // convert incomplete dates to correctly formatted date.
+                                    if (DateTime::createFromFormat('Y', $v)) {
+                                        // if year only
+                                        $value[$k] = $v."-01-01T00:00:00Z";
+                                    } else if (DateTime::createFromFormat('Y-m', $v)) {
+                                        // if month and year
+                                        $value[$k] = $v."-01T00:00:00Z";
+                                    } else if (DateTime::createFromFormat('Y-m-d', $v)) {
+                                        // if day, month, year
+                                        $value[$k] = $v."T00:00:00Z";
                                     }
                                 }
                             }
