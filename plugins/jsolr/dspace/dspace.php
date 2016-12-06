@@ -24,7 +24,7 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
      *
      * @return array A list of DSpace items.
      */
-    protected function getItems($start = 0, $limit = 500)
+    protected function getItems($start = 0, $limit = 10)
     {
         $items = array();
 
@@ -209,9 +209,9 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
             $locale = array_pop($lang);
         }
 
-        $lang = $this->getLanguage($locale, false);
-
         $category = $this->getCollection($source->collection->id);
+
+        $i18n = array();
 
         $array = array();
 
@@ -233,12 +233,15 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
             $array["author_ss"][] = $this->getFacet($author);
         }
 
-        $array["title_txt_$lang"] = $array['name'];
+        $i18n["title"] = $array['name'];
         $array['context_s'] = $this->get('context');
-        $array['lang_s'] = $this->getLanguage($locale);
+
+        // DSpace has poor language support and most users do not implement
+        // multilingual properly so just default to language = all.
+        $array['lang_s'] = '*';
 
         $array['access_i'] = $access;
-        $array["category_txt_$lang"] = $category->name;
+        $i18n["category"] = $category->name;
         $array["category_s"] = $this->getFacet($category->name); // for faceting
         $array["category_i"] = $category->id;
 
@@ -267,7 +270,7 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
                         array(),
                         'array');
 
-        $array["description_txt_$lang"] = implode(" ", $description);
+        $i18n["description"] = implode(" ", $description);
 
         $content = JArrayHelper::getValue(
                         $metadata,
@@ -275,7 +278,7 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
                         array(),
                         'array');
 
-        $array["content_txt_$lang"] = implode(" ", $content);
+        $i18n["content"] = implode(" ", $content);
 
         // index additional fields for faceting.
         $types = array(
@@ -329,6 +332,14 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
                         }
                     }
                 }
+            }
+        }
+
+        // for now index all multilingual fields into every configured joomla language.
+        foreach ($i18n as $key=>$value) {
+            foreach (JLanguageHelper::getLanguages() as $language) {
+                $lang = $this->getLanguage($language->lang_code, false);
+                $array[$key."_txt_".$lang] = $value;
             }
         }
 
