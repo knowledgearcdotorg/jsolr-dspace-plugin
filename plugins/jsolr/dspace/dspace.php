@@ -335,6 +335,17 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
             }
         }
 
+        if (isset($array['issued_dts'][0])) {
+            $date = $array['issued_dts'][0];
+        } else {
+            $date = $array['modified_tdt'];
+        }
+
+        // set date based on issued or fallback to modified.
+        $published = JFactory::getDate($date);
+
+        $array['date_tdt'] = $published->format('Y-m-d\TH:i:s\Z', false);
+
         // for now index all multilingual fields into every configured joomla language.
         foreach ($i18n as $key=>$value) {
             foreach (JLanguageHelper::getLanguages() as $language) {
