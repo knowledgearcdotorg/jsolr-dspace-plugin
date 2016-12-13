@@ -16,4 +16,5 @@
             <tag>alpha</tag>
         </tags>
         <targetplatform name="joomla" version="3.[456789]" />
+    </update>
 </updates>
