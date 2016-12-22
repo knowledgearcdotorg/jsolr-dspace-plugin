@@ -282,7 +282,7 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
 
         // index additional fields for faceting.
         $types = array(
-            "_ss"=>array("dc.subject", "dc.type", "dc.relation"),
+            "_ss"=>array("dc.subject", "dc.type", "dc.relation", "dc.date"),
             "_dts"=>array("dc.date"));
 
         foreach ($metadata as $key=>$value) {
@@ -302,7 +302,7 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
                         }
 
                         if (!empty($value)) {
-                            if ($needle == "dc.date") {
+                            if ($ktype == "_dts" && $needle == "dc.date") {
                                 // DSpace has poor date handling. Sometimes only the year is available.
                                 foreach ($value as $k=>$v) {
                                     // convert incomplete dates to correctly formatted date.
