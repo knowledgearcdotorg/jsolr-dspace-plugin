@@ -151,14 +151,24 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
     /**
      * Maps the DSpace access value to a corresponding Joomla! access level.
      *
-     * @param   string  $access  The DSpace access level.
+     * @param   array   $access  The DSpace access levels.
      *
      * @return  string  The Joomla! access level.
      */
     private function mapDSpaceAccessToJoomla($access)
     {
-        // g0 = public
-        if ($access == 'g0') {
+        $found = false;
+
+        while ($level = current($access) && !$found) {
+            // g0 = public
+            if ($level == 'g0') {
+                $found = true;
+            }
+
+            next($access);
+        }
+
+        if ($found) {
             return $this->get('params')->get('anonymous_access', null);
         } else {
             return $this->get('params')->get('private_access', null);
@@ -173,7 +183,7 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
      */
     protected function prepare($source)
     {
-        $access = $this->mapDSpaceAccessToJoomla(array_pop($source->read));
+        $access = $this->mapDSpaceAccessToJoomla($source->read);
 
         try {
             $source = $this->getItem($source->{"search.resourceid"});
