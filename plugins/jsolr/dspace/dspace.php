@@ -26,9 +26,9 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
      */
     protected function getItems($start = 0, $limit = 10)
     {
-        $items = array();
-
         try {
+            $items = array();
+
             $items = array();
 
             $vars = array();
@@ -72,8 +72,8 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
             if (isset($response->response->docs)) {
                 $items = $response->response->docs;
             }
-        } catch (Exception $e) {
-            JLog::add($e->getMessage(), JLog::ERROR, 'jsolr');
+        } catch (\Exception $e) {
+            $this->out(array("task:index crawler:".$this->get('context')."\n".(string)$e)."\nWill try to continue...", \JLog::ERROR);
         }
 
         return $items;
@@ -88,44 +88,40 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
     {
         $total = 0;
 
-        try {
-            $vars = array();
+        $vars = array();
 
-            $vars['q'] = "*:*";
-            $vars['fq'] = 'search.resourcetype:2';
-            $vars['rows'] = '0';
+        $vars['q'] = "*:*";
+        $vars['fq'] = 'search.resourcetype:2';
+        $vars['rows'] = '0';
 
-            if ($this->get('params')->get('private_access', "") == "") {
-                $vars['fq'] .= ' AND read:g0';
-            } else {
-                // only get items with read set.
-                $vars['fq'] .= ' AND read:[* TO *]';
-            }
-
-            if ($indexed = $this->indexed) {
-                $vars['fq'] .= " AND SolrIndexer.lastIndexed:[$indexed TO $this->now]";
-            }
-
-            $vars['fq'] = urlencode($vars['fq']);
-
-            $url = new JUri($this->params->get('rest_url').'/discover.json');
-
-            $url->setQuery($vars);
-
-            $http = JHttpFactory::getHttp();
-
-            $response = $http->get((string)$url);
-
-            if ((int)$response->code !== 200) {
-                throw new Exception($response->body, $response->code);
-            }
-
-            $response = json_decode($response->body);
-
-            return (int)$response->response->numFound;
-        } catch (Exception $e) {
-            JLog::add($e->getMessage(), JLog::ERROR, 'jsolr');
+        if ($this->get('params')->get('private_access', "") == "") {
+            $vars['fq'] .= ' AND read:g0';
+        } else {
+            // only get items with read set.
+            $vars['fq'] .= ' AND read:[* TO *]';
         }
+
+        if ($indexed = $this->indexed) {
+            $vars['fq'] .= " AND SolrIndexer.lastIndexed:[$indexed TO $this->now]";
+        }
+
+        $vars['fq'] = urlencode($vars['fq']);
+
+        $url = new JUri($this->params->get('rest_url').'/discover.json');
+
+        $url->setQuery($vars);
+
+        $http = JHttpFactory::getHttp();
+
+        $response = $http->get((string)$url);
+
+        if ((int)$response->code !== 200) {
+            throw new Exception($response->body, $response->code);
+        }
+
+        $response = json_decode($response->body);
+
+        return (int)$response->response->numFound;
     }
 
     /**
@@ -188,6 +184,7 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
         try {
             $source = $this->getItem($source->{"search.resourceid"});
         } catch (Exception $e) {
+            $this->out(array("task:index crawler:".$this->get('context')."\n".(string)$e)."\nWill try to continue...", \JLog::ERROR);
             return array();
         }
 
