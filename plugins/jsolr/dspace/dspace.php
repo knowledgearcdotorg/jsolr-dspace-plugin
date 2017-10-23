@@ -73,7 +73,7 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
                 $items = $response->response->docs;
             }
         } catch (\Exception $e) {
-            $this->out(array("task:index crawler:".$this->get('context')."\n".(string)$e)."\nWill try to continue...", \JLog::ERROR);
+            $this->out(array("task:index crawler:".$this->get('context')."\n".(string)$e."\nWill try to continue..."), \JLog::ERROR);
         }
 
         return $items;
@@ -183,8 +183,8 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
 
         try {
             $source = $this->getItem($source->{"search.resourceid"});
-        } catch (Exception $e) {
-            $this->out(array("task:index crawler:".$this->get('context')."\n".(string)$e)."\nWill try to continue...", \JLog::ERROR);
+        } catch (\Exception $e) {
+            $this->out(array("task:index crawler:".$this->get('context')."\n".(string)$e."\nWill try to continue..."), \JLog::ERROR);
             return array();
         }
 
