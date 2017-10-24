@@ -267,8 +267,8 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
             $modified = $created;
         }
 
-        $array['created_tdt'] = $created->format('Y-m-d\TH:i:s\Z', false);
-        $array['modified_tdt'] = $modified->format('Y-m-d\TH:i:s\Z', false);
+        $array['created_dt'] = $created->format('Y-m-d\TH:i:s\Z', false);
+        $array['modified_dt'] = $modified->format('Y-m-d\TH:i:s\Z', false);
         $array["parent_id_i"] = $category->id;
 
         $description = JArrayHelper::getValue(
@@ -345,13 +345,13 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
         if (isset($array['issued_dts'][0])) {
             $date = $array['issued_dts'][0];
         } else {
-            $date = $array['modified_tdt'];
+            $date = $array['modified_dt'];
         }
 
         // set date based on issued or fallback to modified.
         $published = JFactory::getDate($date);
 
-        $array['date_tdt'] = $published->format('Y-m-d\TH:i:s\Z', false);
+        $array['date_dt'] = $published->format('Y-m-d\TH:i:s\Z', false);
 
         // for now index all multilingual fields into every configured joomla language.
         foreach ($i18n as $key=>$value) {
