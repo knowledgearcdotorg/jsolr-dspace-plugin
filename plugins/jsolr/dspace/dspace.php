@@ -351,7 +351,7 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
         // set date based on issued or fallback to modified.
         $published = JFactory::getDate($date);
 
-        $array['date_dt'] = $published->format('Y-m-d\TH:i:s\Z', false);
+        $array['published_dt'] = $published->format('Y-m-d\TH:i:s\Z', false);
 
         // for now index all multilingual fields into every configured joomla language.
         foreach ($i18n as $key=>$value) {
