@@ -361,6 +361,22 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
             }
         }
 
+        $bitstreams = $this->getBitstreams($source);
+
+        foreach ($bitstreams as $bitstream) {
+            $lang = $this->getLanguage(array_shift($bitstream->lang), false);
+
+            if (isset($bitstream->body)) {
+                $array["content_txt_".$lang] .= "\n".$bitstream->body;
+            }
+
+            foreach ($bitstream->metadata as $key=>$value) {
+                $index = 'bitstream_'.$bitstream->id.'_'.preg_replace('/[^A-Za-z0-9_]/', '_', strtolower($key));
+
+                $array[$index.'_ss'] = is_array($value) ? $value : [$value];
+            }
+        }
+
         return $array;
     }
 
@@ -417,5 +433,71 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
                 $document->link = JCarHelperRoute::getItemRoute("dspace:".$document->id_i);
             }
         }
+    }
+
+    /**
+     * Gets a list of bitstreams for the parent item.
+     *
+     * @param stdClass $parent The parent Solr item.
+     * @return array An array of bitstream objects.
+     */
+    private function getBitstreams($parent)
+    {
+        $bundles = array();
+
+        $bitstreams = array();
+
+        $url = new JUri($this->params->get('rest_url').'/items/'.$parent->id.'/bundles.json?type=ORIGINAL');
+
+        $http = JHttpFactory::getHttp();
+
+        $response = $http->get((string)$url);
+
+        if ((int)$response->code !== 200) {
+            throw new Exception($response->body, $response->code);
+        }
+
+        $bundles = json_decode($response->body);
+
+        $i = 0;
+
+        foreach ($bundles as $bundle) {
+            foreach ($bundle->bitstreams as $bitstream) {
+                $path = $this->params->get('rest_url').'/bitstreams/'.$bitstream->id.'/download';
+
+                try {
+                    $this->out(array($path, "[extracting]"), \JLog::DEBUG);
+
+                    $dispatcher = JDispatcher::getInstance();
+                    JPluginHelper::importPlugin('jtika');
+
+                    $results = $dispatcher->trigger('onJTikaExtract', array($path));
+
+                    $data = array_pop($results);
+
+                    if (is_null($data)) {
+                        $this->out(array($path, "[ignored]"), \JLog::DEBUG);
+                    } else {
+                        $bitstreams[$i] = $data;
+                        $bitstreams[$i]->type = $bundle->name;
+                        $bitstreams[$i]->id = $bitstream->id;
+
+                        $this->out(array($path, "[extracted]"), \JLog::DEBUG);
+
+                        $i++;
+                    }
+                } catch (Exception $e) {
+                    if ($e->getMessage()) {
+                        $this->out($e->getMessage(), \JLog::ERROR);
+                    } else {
+                        $code = $e->getCode();
+                        $this->out(array(JText::_("PLG_JSOLRCRAWLER_DSPACE_ERROR_".$code)), \JLog::ERROR);
+                        $this->out(array($path, '[status:'.$code.']'), \JLog::ERROR);
+                    }
+                }
+            }
+        }
+
+        return $bitstreams;
     }
 }
