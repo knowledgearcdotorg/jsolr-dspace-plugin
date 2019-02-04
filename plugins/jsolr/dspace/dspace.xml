@@ -59,6 +59,26 @@
                     size="22"
                     format="%Y-%m-%d %H:%M:%S"
                     filter="user_utc"/>
+
+                <field
+                    name="full_text_indexing"
+                    type="radio"
+                    label="PLG_JSOLR_DSPACE_FIELD_FULL_TEXT_INDEXING_LABEL"
+                    description="PLG_JSOLR_DSPACE_FIELD_FULL_TEXT_INDEXING_DESC"
+                    default="0"
+                    class="btn-group">
+                    <option value="0">JNO</option>
+                    <option value="1">JYES</option>
+                </field>
+
+                <field
+                    name="ignore_controlled_vocabulary"
+                    type="text"
+                    label="PLG_JSOLR_DSPACE_FIELD_IGNORE_CONTROLLED_VOCABULARY_LABEL"
+                    description="PLG_JSOLR_DSPACE_FIELD_IGNORE_CONTROLLED_VOCABULARY_DESC"
+                    default="Author,Authors,Subject"
+                    class="btn-group"
+                    size="45"/>
             </fieldset>
 
             <fieldset

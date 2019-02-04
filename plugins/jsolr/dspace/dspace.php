@@ -17,6 +17,8 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
 {
     protected $context = 'archive.item';
 
+    protected $communities = array();
+
     protected $collections = array();
 
     /**
@@ -35,7 +37,7 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
 
             $vars['q'] = "*:*";
 
-            $vars['fl'] = 'search.resourceid,search.uniqueid,read';
+            $vars['fl'] = 'search.resourceid,search.uniqueid,location.comm,read';
 
             $vars['fq'] = 'search.resourcetype:2';
 
@@ -181,6 +183,8 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
     {
         $access = $this->mapDSpaceAccessToJoomla($source->read);
 
+        $communities = $source->{"location.comm"};
+
         try {
             $source = $this->getItem($source->{"search.resourceid"});
         } catch (\Exception $e) {
@@ -204,9 +208,9 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
                     $metadata[$name][] = $temp;
                 }
 
-                $metadata[$name][] = $field->value;
+                $metadata[$name][] = static::_cleanControlledVocabulary($field->value);
             } else {
-                $metadata[$name] = $field->value;
+                $metadata[$name] = static::_cleanControlledVocabulary($field->value);
             }
         }
 
@@ -229,10 +233,19 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
         $array["author"] = array();
         $array["author_ss"] = array();
 
-        $authors = JArrayHelper::getValue($metadata, 'dc.contributor.author', array());
+        $authors = [];
 
-        if (!is_array($authors)) {
-            $authors = array($authors);
+        // Merge authors from multiple dc sources.
+        $dcAuthorFields = ['dc.contributor.author', 'dc.contributor'];
+
+        foreach ($dcAuthorFields as $item) {
+            $dcAuthorValues = JArrayHelper::getValue($metadata, $item, array());
+
+            if (!is_array($dcAuthorValues)) {
+                $dcAuthorValues = array($dcAuthorValues);
+            }
+
+            $authors = array_merge($authors, $dcAuthorValues);
         }
 
         foreach ($authors as $author) {
@@ -323,10 +336,17 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
                                         // if day, month, year
                                         $value[$k] = $v."T00:00:00Z";
                                     }
+
+                                    // sometimes DSpace dates aren't even dates. Only allow valid dates.
+                                    $d = DateTime::createFromFormat('Y-m-d H:i:s', $value[$k]);
+
+                                    if (!$d || $d->format('Y-m-d H:i:s') !== $value[$k]) {
+                                        unset($value[$k]);
+                                    }
                                 }
                             }
 
-                            $array[$field.$ktype] = array_merge($array[$field.$ktype] , $value);
+                            $array[$field.$ktype] = array_merge($array[$field.$ktype], $value);
 
                             // only index dc.subject as a tag.
                             if ($needle == 'dc.subject') {
@@ -361,23 +381,61 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
             }
         }
 
-        $bitstreams = $this->getBitstreams($source);
+        if ($this->params->get('full_text_indexing', false)) {
+            $bitstreams = $this->getBitstreams($source);
 
-        foreach ($bitstreams as $bitstream) {
-            $lang = $this->getLanguage(array_shift($bitstream->lang), false);
+            foreach ($bitstreams as $bitstream) {
+                $lang = $this->getLanguage(array_shift($bitstream->lang), false);
 
-            if (isset($bitstream->body)) {
-                $array["content_txt_".$lang] .= "\n".$bitstream->body;
-            }
+                if (isset($bitstream->body)) {
+                    $array["content_txt_".$lang] .= "\n".$bitstream->body;
+                }
 
-            foreach ($bitstream->metadata as $key=>$value) {
-                $index = 'bitstream_'.$bitstream->id.'_'.preg_replace('/[^A-Za-z0-9_]/', '_', strtolower($key));
+                foreach ($bitstream->metadata as $key=>$value) {
+                    $index = 'bitstream_'.$bitstream->id.'_'.preg_replace('/[^A-Za-z0-9_]/', '_', strtolower($key));
 
-                $array[$index.'_ss'] = is_array($value) ? $value : [$value];
+                    $array[$index.'_ss'] = is_array($value) ? $value : [$value];
+                }
             }
         }
 
+        foreach ($communities as $community) {
+            $array['community_ss'][] = $this->getCommunity($community)->name;
+        }
+
         return $array;
+    }
+
+    private function getCommunity($id)
+    {
+        $communities = $this->get('communities');
+        $community = null;
+
+        if (array_key_exists($id, $communities)) {
+            $community = JArrayHelper::getValue($communities, $id);
+        } else {
+            try {
+                $url = new JUri($this->params->get('rest_url').'/communities/'.$id.'.json');
+
+                $http = JHttpFactory::getHttp();
+
+                $response = $http->get((string)$url);
+
+                if ((int)$response->code !== 200) {
+                    throw new Exception($response->body, $response->code);
+                }
+
+                $community = json_decode($response->body);
+
+                $this->communities[$community->id] = $community;
+            } catch (Exception $e) {
+                $this->out($e->getMessage(), \JLog::ERROR);
+
+                throw $e;
+            }
+        }
+
+        return $community;
     }
 
     private function getCollection($id)
@@ -501,5 +559,32 @@ class PlgJSolrDSpace extends \JSolr\Plugin\Update
         }
 
         return $bitstreams;
+    }
+
+    private function _cleanControlledVocabulary($value)
+    {
+        $ignored = $this
+                    ->get('params')
+                    ->get('ignore_controlled_vocabulary');
+
+        $array = explode(',', $ignored);
+
+        $cleanValue = $value;
+
+        $found = false;
+
+        while (($item = current($array)) && !$found) {
+            $search = $item."::";
+
+            if (strpos($value, $search) === 0) {
+                $cleanValue = str_replace($search ,"", $value);
+
+                $found = true;
+            }
+
+            next($array);
+        }
+
+        return $cleanValue;
     }
 }
