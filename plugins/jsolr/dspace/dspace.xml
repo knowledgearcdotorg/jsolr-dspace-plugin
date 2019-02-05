@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <extension version="3.7" type="plugin" group="jsolr" method="upgrade">
     <name>plg_jsolr_dspace</name>
-    <creationDate>2017-10-23</creationDate>
+    <creationDate>2019-02-06</creationDate>
     <author>KnowledgeArc Ltd</author>
     <authorEmail>development@knowledgearc.com</authorEmail>
     <authorUrl>http://www.knowledgearc.org</authorUrl>
-    <copyright>>Copyright (C) 2012-2017 KnowledgeArc Ltd. All rights reserved.</copyright>
+    <copyright>>Copyright (C) 2012-2019 KnowledgeArc Ltd. All rights reserved.</copyright>
     <license>http://www.gnu.org/licenses/gpl-3.0.html</license>
-    <version>1.0.0-beta</version>
+    <version>1.0.0-beta.2</version>
     <description>PLG_JSOLR_DSPACE_XML_DESCRIPTION</description>
     <files>
         <filename plugin="dspace">dspace.php</filename>
